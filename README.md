@@ -31,16 +31,16 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 python3 tavily_api/tavily_extract.py
 ```
 
-검색어를 직접 입력할 수 있습니다.
+검색어를 직접 입력할 수 있습니다. GDELT 검색은 영어 키워드가 더 안정적으로 동작하는 경우가 많으므로, 검색어는 가능하면 영어로 입력하는 것을 권장합니다. 한국어 기사를 찾더라도 언어 필터는 기본적으로 `sourcelang:korean`이 적용됩니다.
 
 ```bash
-python3 tavily_api/tavily_extract.py "AI 반도체"
+python3 tavily_api/tavily_extract.py "AI semiconductor"
 ```
 
 추가 옵션도 사용할 수 있습니다.
 
 ```bash
-python3 tavily_api/tavily_extract.py "AI 반도체" --source-lang korean --sort hybridrel --maxrecords 20 --timespan 1d --tavily-count 10
+python3 tavily_api/tavily_extract.py "AI semiconductor" --source-lang korean --sort hybridrel --maxrecords 20 --timespan 1d --tavily-count 10
 ```
 
 ## GDELT 호출 형식
