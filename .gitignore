@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local cache / runtime files
+.gdelt_cache/
+.dummy/
+
+# Secrets
+tavily_api/key.txt
+.env
+.env.*
+
+# Generated output JSON
+tavily_api/extracted_articles.json
+tavily_api/extracted_english_articles.json
+tavily_api/extracted_english_articles_1d.json
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs
+*.log
