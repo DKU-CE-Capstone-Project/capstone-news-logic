@@ -11,6 +11,7 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | `tavily_api/key.txt` | Tavily API 키 파일. Git에 올리지 않습니다 |
 | `tavily_api/extracted_articles.json` | 최종 출력 JSON. 실행 시 새로 생성됩니다 |
 | `diffbot/diffbot_extract.py` | Diffbot Article API로 뉴스 본문을 추출하는 실행 파일 |
+| `BODY_MATCH_VALIDATION.md` | 저장된 기사 본문과 실제 URL 본문이 일치하는지 검증하는 방법 |
 | `diffbot/token.txt` | Diffbot API token 파일. Git에 올리지 않습니다 |
 | `diffbot/extracted_articles.json` | Diffbot 추출 결과 JSON. 실행 시 새로 생성됩니다 |
 | `.gdelt_cache/` | GDELT 응답 캐시와 요청 간격 기록 |
@@ -217,81 +218,7 @@ python3 tavily_api/tavily_extract.py --help
 
 ## 본문 일치 검증
 
-최종 JSON의 `cleaned_content`와 URL의 실제 본문이 일치하는지 느슨한 기준으로 검증할 수 있습니다. 공백, 문장부호, 일부 부가 문구 차이는 무시하고 문자/단어 겹침률을 기준으로 판단합니다.
-
-```bash
-python3 - <<'PY'
-import difflib
-import json
-import re
-from pathlib import Path
-
-from tavily_api.tavily_extract import extract_news_body
-
-path = Path("tavily_api/extracted_articles.json")
-data = json.loads(path.read_text(encoding="utf-8"))
-
-
-def compact(text):
-    return re.sub(r"[^0-9A-Za-z가-힣]+", "", (text or "").lower())
-
-
-def words(text):
-    return re.findall(r"[0-9A-Za-z가-힣]+", (text or "").lower())
-
-
-def shingles(seq, n):
-    if len(seq) < n:
-        return set(seq) if seq else set()
-    return {tuple(seq[i:i + n]) for i in range(len(seq) - n + 1)}
-
-
-def char_shingles(text, n=7):
-    text = compact(text)
-    if len(text) < n:
-        return {text} if text else set()
-    return {text[i:i + n] for i in range(len(text) - n + 1)}
-
-
-def compare(saved, live):
-    saved_chars = char_shingles(saved)
-    live_chars = char_shingles(live)
-    char_coverage = len(saved_chars & live_chars) / len(saved_chars) if saved_chars else 0.0
-
-    saved_words = shingles(words(saved), 4)
-    live_words = shingles(words(live), 4)
-    word_coverage = len(saved_words & live_words) / len(saved_words) if saved_words else 0.0
-
-    seq_ratio = difflib.SequenceMatcher(
-        None,
-        compact(saved)[:10000],
-        compact(live)[:10000],
-        autojunk=False,
-    ).ratio()
-
-    if len(live or "") < 120:
-        return "추출 실패"
-    if char_coverage >= 0.78 or word_coverage >= 0.78 or seq_ratio >= 0.82:
-        return "일치"
-    if char_coverage >= 0.55 or word_coverage >= 0.55 or seq_ratio >= 0.62:
-        return "대체로 일치"
-    if char_coverage >= 0.30 or word_coverage >= 0.30 or seq_ratio >= 0.40:
-        return "부분 일치/확인 필요"
-    return "불일치 가능성 높음"
-
-
-summary = {}
-for item in data.get("results", []):
-    live = extract_news_body(item.get("url", ""), item.get("title", "")) or ""
-    status = compare(item.get("cleaned_content", ""), live)
-    summary[status] = summary.get(status, 0) + 1
-    print(status, "-", item.get("title", ""))
-
-print("요약:", summary)
-PY
-```
-
-최근 기본값 테스트에서는 `results` 10개 모두 `일치`로 확인되었습니다.
+저장된 `cleaned_content`와 URL의 실제 본문이 일치하는지 확인하는 방법은 [BODY_MATCH_VALIDATION.md](BODY_MATCH_VALIDATION.md)를 참고합니다.
 
 ## 주의 사항
 
