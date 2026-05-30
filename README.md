@@ -1,6 +1,6 @@
-# GDELT + Tavily News Extraction
+# GDELT News Extraction
 
-GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 뒤 Tavily Extract API와 로컬 본문 정제 로직으로 최종 뉴스 본문 JSON을 생성하는 프로젝트입니다.
+GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 뒤 Tavily Extract API, Diffbot Article API, Jina Reader API로 뉴스 본문 JSON을 생성하는 프로젝트입니다.
 
 ## 사용 파일
 
@@ -11,10 +11,12 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | `tavily_api/key.txt` | Tavily API 키 파일. Git에 올리지 않습니다 |
 | `tavily_api/extracted_articles.json` | 최종 출력 JSON. 실행 시 새로 생성됩니다 |
 | `diffbot/diffbot_extract.py` | Diffbot Article API로 뉴스 본문을 추출하는 실행 파일 |
+| `diffbot/diffbot_extract_md.py` | Diffbot Article API 결과를 Markdown으로 저장하는 실행 파일 |
 | `jina_reader/jina_reader_extract.py` | Jina Reader API로 뉴스 본문을 추출하는 실행 파일 |
 | `BODY_MATCH_VALIDATION.md` | 저장된 기사 본문과 실제 URL 본문이 일치하는지 검증하는 방법 |
 | `diffbot/token.txt` | Diffbot API token 파일. Git에 올리지 않습니다 |
 | `diffbot/extracted_articles.json` | Diffbot 추출 결과 JSON. 실행 시 새로 생성됩니다 |
+| `diffbot/extracted_articles.md` | Diffbot Markdown 추출 결과. 실행 시 새로 생성됩니다 |
 | `jina_reader/key.txt` | Jina API key 파일. 선택 사항이며 Git에 올리지 않습니다 |
 | `jina_reader/extracted_articles.json` | Jina Reader 추출 결과 JSON. 실행 시 새로 생성됩니다 |
 | `.gdelt_cache/` | GDELT 응답 캐시와 요청 간격 기록 |
@@ -31,6 +33,8 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | 기간 | `1d` | 최근 하루 기사 |
 | GDELT 검색 기사 수 | `20` | GDELT에서 가져올 최대 기사 수 |
 | Tavily 전달 기사 수 | `10` | 중복 제거 후 Tavily API에 보낼 최대 URL 수 |
+| Diffbot 전달 기사 수 | `10` | 중복 제거 후 Diffbot Article API에 보낼 최대 URL 수 |
+| Jina Reader 전달 기사 수 | `10` | 중복 제거 후 Jina Reader API에 보낼 최대 URL 수 |
 
 검색어를 생략하면 `semiconductor`가 사용됩니다.
 
@@ -204,13 +208,16 @@ GDELT 결과에서 중복 뉴스를 제거한 뒤 상위 10개 URL만 Tavily Ext
 
 ## 출력
 
-최종 결과는 아래 파일에 저장됩니다.
+각 추출기는 실행 결과를 자기 디렉터리의 결과 파일에 저장합니다.
 
-```text
-tavily_api/extracted_articles.json
-```
+| 추출기 | 기본 출력 파일 | 설명 |
+|---|---|---|
+| Tavily | `tavily_api/extracted_articles.json` | Tavily raw content 길이와 로컬 정제 본문 저장 |
+| Diffbot | `diffbot/extracted_articles.json` | Diffbot `text` 길이와 정제 본문 저장 |
+| Diffbot Markdown | `diffbot/extracted_articles.md` | Diffbot 결과를 사람이 읽기 쉬운 Markdown으로 저장 |
+| Jina Reader | `jina_reader/extracted_articles.json` | Jina Reader `content` 길이와 정제 본문 저장 |
 
-출력 JSON 형식은 다음과 같습니다.
+JSON 출력은 추출기와 관계없이 같은 top-level 구조를 사용합니다.
 
 ```json
 {
@@ -224,7 +231,6 @@ tavily_api/extracted_articles.json
       "published_at": "20260525T010000Z",
       "language": "Korean",
       "image_url": "https://example.com/image.jpg",
-      "raw_content_length": 12345,
       "cleaned_content": "정제된 기사 본문...",
       "cleaned_content_length": 2345
     }
@@ -233,43 +239,110 @@ tavily_api/extracted_articles.json
 }
 ```
 
-`image_url`은 GDELT의 `socialimage` 값을 사용합니다. GDELT에서 이미지 URL을 제공하지 않으면 빈 문자열입니다.
+`query`에는 실제 GDELT query 문자열이 들어갑니다. `--url` 또는 `--url-file`로 직접 URL을 입력한 Diffbot/Jina 실행에서는 `direct-url`이 들어갑니다. `total`은 성공적으로 저장된 기사 수이고, `failed_results`에는 실패한 URL과 오류 메시지가 들어갑니다.
+
+Tavily 결과의 `results` 항목은 아래 필드를 사용합니다.
+
+```json
+{
+  "url": "https://example.com/news-1",
+  "title": "기사 제목",
+  "source_domain": "example.com",
+  "published_at": "20260525T010000Z",
+  "language": "Korean",
+  "image_url": "https://example.com/image.jpg",
+  "raw_content_length": 12345,
+  "cleaned_content": "정제된 기사 본문...",
+  "cleaned_content_length": 2345
+}
+```
+
+Diffbot 결과의 `results` 항목은 Diffbot Article API의 `text` 필드 길이를 함께 저장합니다.
+
+```json
+{
+  "url": "https://example.com/news-1",
+  "title": "기사 제목",
+  "source_domain": "example.com",
+  "published_at": "20260525T010000Z",
+  "language": "Korean",
+  "image_url": "https://example.com/image.jpg",
+  "diffbot_text_length": 2345,
+  "cleaned_content": "정제된 기사 본문...",
+  "cleaned_content_length": 2345
+}
+```
+
+Jina Reader 결과의 `results` 항목은 Reader 응답 제목과 원본 content 길이를 함께 저장합니다.
+
+```json
+{
+  "url": "https://example.com/news-1",
+  "title": "기사 제목",
+  "source_domain": "example.com",
+  "published_at": "20260525T010000Z",
+  "language": "Korean",
+  "image_url": "https://example.com/image.jpg",
+  "jina_title": "Reader 응답 제목",
+  "jina_content_length": 3456,
+  "cleaned_content": "정제된 기사 본문...",
+  "cleaned_content_length": 2345
+}
+```
+
+`image_url`은 GDELT의 `socialimage` 값을 사용합니다. GDELT에서 이미지 URL을 제공하지 않거나 직접 URL을 입력하면 빈 문자열입니다.
 
 ## 실행 구조
 
-전체 실행 순서는 아래와 같습니다.
+세 추출기는 GDELT 기사 URL 수집과 중복 제거 로직을 공유합니다.
+
+1. 실행 스크립트에서 검색어와 옵션을 읽습니다.
+2. `test.py`의 `build_gdelt_params()`로 GDELT DOC API query parameters를 만듭니다.
+3. `fetch_gdelt_json()`으로 최근 1일 한국어 기사 목록을 가져옵니다.
+4. GDELT 결과를 `title`, `url`, `source_domain`, `published_at`, `language`, `image_url` 메타데이터로 변환합니다.
+5. URL의 `www.` / `m.` 차이와 추적 파라미터를 정규화하고, URL 또는 제목이 같은 기사를 제거합니다.
+6. 각 추출기의 count 옵션만큼 상위 URL을 잘라 본문 추출 API에 전달합니다.
+
+Tavily 실행 순서는 아래와 같습니다.
 
 1. `tavily_api/tavily_extract.py` 실행
-2. `test.py`의 설정으로 GDELT DOC API 호출
-3. 최근 1일 한국어 기사 20개를 연관도순으로 조회
-4. GDELT 결과에서 URL과 제목 기준으로 중복 뉴스 제거
-5. 중복 제거 후 상위 10개 URL을 Tavily Extract API에 전달
-6. Tavily 응답의 URL별 raw content 길이를 기록
-7. 각 기사 URL을 다시 열어 실제 뉴스 본문을 로컬 정제 로직으로 추출
-8. 광고, 댓글, 공유 UI, 저작권 문구 등 본문 외 요소 제거
-9. DOM 기반 추출이 실패하면 `trafilatura` fallback 사용
-10. 최종 JSON을 `tavily_api/extracted_articles.json`에 저장
+2. 중복 제거 후 상위 URL을 Tavily `/extract` API에 `depth=basic`으로 전달
+3. Tavily 응답의 URL별 `raw_content` 길이를 `raw_content_length`에 기록
+4. 각 기사 URL을 다시 열어 로컬 DOM 기반 본문 정제 로직 실행
+5. 광고, 댓글, 공유 UI, 저작권 문구 등 본문 외 요소 제거
+6. DOM 기반 추출이 실패하면 `trafilatura` fallback 사용
+7. 최종 JSON을 `tavily_api/extracted_articles.json`에 저장
+
+Diffbot 실행 순서는 아래와 같습니다.
+
+1. `diffbot/diffbot_extract.py` 실행
+2. `diffbot/token.txt` 또는 `--token-file`에서 Diffbot token 로드
+3. GDELT에서 수집한 URL 또는 `--url`, `--url-file`로 직접 입력한 URL 준비
+4. 각 URL을 Diffbot Article API `/v3/article`에 GET 요청으로 전달
+5. 필요하면 `--render-delay-ms`, `--scroll`, `--use-proxy`, `--natural-language` 옵션을 함께 전달
+6. 응답 `objects[0].text`를 문단 단위로 정규화해 `cleaned_content`에 저장
+7. Diffbot `text`가 비었고 `--fallback-local`이 있으면 Tavily의 로컬 DOM/trafilatura 추출기를 한 번 더 실행
+8. 최종 JSON을 `diffbot/extracted_articles.json` 또는 `--output` 경로에 저장
+
+`diffbot/diffbot_extract_md.py`는 같은 Diffbot 추출 과정을 사용하지만 JSON 대신 Markdown 문서를 만듭니다. 각 기사에는 URL, source, published time, language, image, 본문 길이, 본문이 순서대로 기록됩니다.
+
+Jina Reader 실행 순서는 아래와 같습니다.
+
+1. `jina_reader/jina_reader_extract.py` 실행
+2. `jina_reader/key.txt` 또는 `--api-key-file`이 있으면 Jina API key 로드. 없으면 키 없이 호출
+3. GDELT에서 수집한 URL 또는 `--url`, `--url-file`로 직접 입력한 URL 준비
+4. 각 URL을 Jina Reader `https://r.jina.ai/`에 POST 요청으로 전달
+5. 기본 헤더로 `X-Engine: browser`, `X-Respond-Timing: network-idle`, `X-No-Cache: true`, target/remove selector를 적용
+6. 응답 `data.content` 또는 `data.text`에서 Markdown 이미지, 링크 URL, 제목 중복, boilerplate 문구 제거
+7. 정제된 plain text를 `cleaned_content`에 저장
+8. 최종 JSON을 `jina_reader/extracted_articles.json` 또는 `--output` 경로에 저장
 
 ## 테스트 실행 방법
 
-기본값으로 전체 파이프라인을 테스트합니다.
+먼저 문법 검사를 수행합니다.
 
 ```bash
-python3 tavily_api/tavily_extract.py
-```
-
-정상 실행 시 확인할 항목은 아래와 같습니다.
-
-- GDELT에서 `maxrecords=20`, `timespan=1d`, `sort=hybridrel`, `sourcelang:korean`으로 조회되는지 확인
-- 중복 제거 후 기사 수가 출력되는지 확인
-- Tavily API 요청 URL 수가 최대 10개인지 확인
-- `tavily_api/extracted_articles.json` 파일이 생성되는지 확인
-- `failed_results`가 비어 있거나 실패 이유가 기록되는지 확인
-
-문법 검사는 다음 명령으로 수행합니다.
-
-```bash
-python3 -m py_compile test.py tavily_api/tavily_extract.py
+python3 -m py_compile test.py tavily_api/tavily_extract.py diffbot/diffbot_extract.py diffbot/diffbot_extract_md.py jina_reader/jina_reader_extract.py
 ```
 
 도움말은 다음 명령으로 확인합니다.
@@ -277,16 +350,80 @@ python3 -m py_compile test.py tavily_api/tavily_extract.py
 ```bash
 python3 test.py --help
 python3 tavily_api/tavily_extract.py --help
+python3 diffbot/diffbot_extract.py --help
+python3 diffbot/diffbot_extract_md.py --help
+python3 jina_reader/jina_reader_extract.py --help
 ```
+
+GDELT 검색과 Tavily 전체 파이프라인은 기본값으로 테스트합니다. `tavily_api/key.txt`가 필요하고, 기본 출력 파일을 덮어씁니다.
+
+```bash
+python3 tavily_api/tavily_extract.py
+```
+
+Diffbot JSON 출력은 API 사용량을 줄이기 위해 직접 URL 1개로 테스트하는 것을 권장합니다. `diffbot/token.txt`가 필요합니다.
+
+```bash
+python3 diffbot/diffbot_extract.py --url "https://example.com/news/article" --output /tmp/diffbot_test.json --request-interval 0
+```
+
+Diffbot Markdown 출력도 같은 방식으로 테스트할 수 있습니다.
+
+```bash
+python3 diffbot/diffbot_extract_md.py --url "https://example.com/news/article" --output /tmp/diffbot_test.md --request-interval 0
+```
+
+Jina Reader는 키 없이도 직접 URL 1개로 테스트할 수 있습니다. API key가 반드시 필요한 환경에서는 `--require-api-key`를 추가합니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article" --output /tmp/jina_test.json --request-interval 0
+python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article" --require-api-key --output /tmp/jina_test.json --request-interval 0
+```
+
+GDELT 검색까지 포함한 Diffbot/Jina 테스트는 count를 1로 낮춰 실행합니다.
+
+```bash
+python3 diffbot/diffbot_extract.py "AI semiconductor" --diffbot-count 1 --output /tmp/diffbot_gdelt_test.json --request-interval 0
+python3 jina_reader/jina_reader_extract.py "AI semiconductor" --jina-count 1 --output /tmp/jina_gdelt_test.json --request-interval 0
+```
+
+정상 실행 시 확인할 항목은 아래와 같습니다.
+
+- GDELT 실행에서는 `maxrecords=20`, `timespan=1d`, `sort=hybridrel`, `sourcelang:korean`으로 조회되는지 확인
+- 중복 제거 후 기사 수와 각 URL이 출력되는지 확인
+- API 요청 URL 수가 `--tavily-count`, `--diffbot-count`, `--jina-count` 값을 넘지 않는지 확인
+- 지정한 JSON 또는 Markdown 출력 파일이 생성되는지 확인
+- `results`에는 본문과 길이 필드가 기록되고, 실패한 URL은 `failed_results`에 오류 이유가 기록되는지 확인
 
 ## 본문 일치 검증
 
 저장된 `cleaned_content`와 URL의 실제 본문이 일치하는지 확인하는 방법은 [BODY_MATCH_VALIDATION.md](BODY_MATCH_VALIDATION.md)를 참고합니다.
 
+## 품질 검증 결론
+
+Tavily, Diffbot, Jina Reader 결과를 같은 기사 raw 본문과 비교한 품질 검증에서는 본문 순도 기준으로 `Diffbot ≈ Tavily > Jina`로 판단했습니다. Jina Reader는 평균 본문 길이와 raw 커버리지가 가장 높지만, 공유 UI, 관련기사, 광고/영상 블록 같은 본문 외 요소가 더 많이 섞이는 경향이 있습니다.
+
+요약 지표는 아래와 같습니다. raw 자체가 한글 깨짐이었던 `#2 국민일보`는 품질 판단용 요약에서 제외했고, Jina 10번은 `HTTP 451` 차단으로 갱신 결과가 실패해 이전 성공 결과로 대체해 계산했습니다.
+
+| 도구 | 평균 본문 길이 | raw 대비 길이 | 정합도 | raw 커버리지 | 잡음 합계 |
+|---|---:|---:|---:|---:|---:|
+| Tavily | 2,347자 | 24.4% | 99.2% | 36.1% | 1 |
+| Diffbot | 2,281자 | 23.5% | 99.5% | 35.0% | 2 |
+| Jina Reader | 2,894자 | 27.2% | 98.1% | 40.9% | 12 |
+
+용도별 판단은 아래와 같습니다.
+
+- 깨끗한 본문 JSON이 목적이면 `Diffbot` 또는 `Tavily`를 우선 사용합니다.
+- 본문을 더 많이 회수하는 것이 목적이면 `Jina Reader`가 유리합니다.
+- Jina Reader를 사용할 때는 공유 UI, 관련기사, 광고/영상 블록 제거 후처리를 반드시 적용하는 것이 좋습니다.
+
 ## 주의 사항
 
 - `tavily_api/key.txt`는 API 키 파일이므로 GitHub에 올리면 안 됩니다.
 - `diffbot/token.txt`는 API token 파일이므로 GitHub에 올리면 안 됩니다.
+- `jina_reader/key.txt`는 선택 사항이지만 API key 파일이므로 GitHub에 올리면 안 됩니다.
 - `.gdelt_cache/`는 로컬 캐시입니다. 실행 결과 재현에는 필요하지 않습니다.
 - `tavily_api/extracted_articles.json`은 실행 결과물입니다. 샘플 결과가 필요하면 민감정보 없는 별도 샘플 파일을 만들어 사용하는 것이 좋습니다.
 - `diffbot/extracted_articles.json`은 Diffbot 실행 결과물입니다.
+- `diffbot/extracted_articles.md`는 Diffbot Markdown 실행 결과물입니다.
+- `jina_reader/extracted_articles.json`은 Jina Reader 실행 결과물입니다.
