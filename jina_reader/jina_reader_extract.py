@@ -45,6 +45,29 @@ OUTPUT_FILE = Path(__file__).resolve().parent / "extracted_articles.json"
 JINA_CONTENT_HEADERS = {
     "Accept": "application/json",
 }
+DEFAULT_ENGINE = "browser"
+DEFAULT_TIMEOUT_SECONDS = 45
+DEFAULT_RESPOND_TIMING = "network-idle"
+DEFAULT_RETAIN_IMAGES = "none"
+DEFAULT_RETAIN_LINKS = "text"
+DEFAULT_NO_CACHE = True
+DEFAULT_DETACH_INVISIBLES = True
+DEFAULT_TARGET_SELECTOR = (
+    "article, main, [role='main'], #article, #articleBody, #article_body, "
+    "#news_body, #newsContent, #news_content, .article_body, .article-body, "
+    ".articleBody, .article_view, .article-view, .article-content, "
+    ".article_view_content, .news_body, .news-body, .news_view, .news-content, "
+    ".story-body, .view_body, .view-cont"
+)
+DEFAULT_REMOVE_SELECTOR = (
+    "script, style, noscript, nav, header, footer, aside, form, iframe, "
+    ".ad, .ads, .advertisement, .banner, .comment, .comments, .reply, "
+    ".related, .recommend, .popular, .ranking, .share, .sns, .social, "
+    ".newsletter, .subscribe, .login, .menu, .pagination, .tag, .keyword, "
+    ".copyright, .toolbar, [class*='ad_'], [class*='ad-'], [id*='ad_'], "
+    "[id*='ad-'], [class*='comment'], [id*='comment'], [class*='related'], "
+    "[id*='related'], [class*='recommend'], [id*='recommend']"
+)
 MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*]\([^)]+\)")
 MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)]\([^)]+\)")
 MARKDOWN_DECORATION_RE = re.compile(r"[*_`]+")
@@ -127,8 +150,13 @@ def build_reader_headers(
     api_key: str = "",
     engine: str | None = None,
     timeout_seconds: int | None = None,
+    respond_timing: str | None = None,
     wait_for_selector: str | None = None,
     target_selector: str | None = None,
+    remove_selector: str | None = None,
+    retain_images: str | None = None,
+    retain_links: str | None = None,
+    detach_invisibles: bool = False,
     no_cache: bool = False,
 ) -> dict:
     headers = dict(JINA_CONTENT_HEADERS)
@@ -138,10 +166,20 @@ def build_reader_headers(
         headers["X-Engine"] = engine
     if timeout_seconds is not None:
         headers["X-Timeout"] = str(timeout_seconds)
+    if respond_timing:
+        headers["X-Respond-Timing"] = respond_timing
     if wait_for_selector:
         headers["X-Wait-For-Selector"] = wait_for_selector
     if target_selector:
         headers["X-Target-Selector"] = target_selector
+    if remove_selector:
+        headers["X-Remove-Selector"] = remove_selector
+    if retain_images:
+        headers["X-Retain-Images"] = retain_images
+    if retain_links:
+        headers["X-Retain-Links"] = retain_links
+    if detach_invisibles:
+        headers["X-Detach-Invisibles"] = "true"
     if no_cache:
         headers["X-No-Cache"] = "true"
     return headers
@@ -152,8 +190,13 @@ def call_jina_reader(
     api_key: str = "",
     engine: str | None = None,
     timeout_seconds: int | None = None,
+    respond_timing: str | None = None,
     wait_for_selector: str | None = None,
     target_selector: str | None = None,
+    remove_selector: str | None = None,
+    retain_images: str | None = None,
+    retain_links: str | None = None,
+    detach_invisibles: bool = False,
     no_cache: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> dict:
@@ -162,8 +205,13 @@ def call_jina_reader(
         api_key=api_key,
         engine=engine,
         timeout_seconds=timeout_seconds,
+        respond_timing=respond_timing,
         wait_for_selector=wait_for_selector,
         target_selector=target_selector,
+        remove_selector=remove_selector,
+        retain_images=retain_images,
+        retain_links=retain_links,
+        detach_invisibles=detach_invisibles,
         no_cache=no_cache,
     )
     request_timeout = max(30, (timeout_seconds or 30) + 20)
@@ -291,13 +339,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=30,
-        help="Jina Reader가 대상 페이지 로드를 기다릴 시간(초). 기본값: 30",
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help=f"Jina Reader가 대상 페이지 로드를 기다릴 시간(초). 기본값: {DEFAULT_TIMEOUT_SECONDS}",
     )
     parser.add_argument(
         "--engine",
         choices=("auto", "browser", "curl"),
-        help="Jina Reader fetch engine. 지정하지 않으면 Reader 기본값을 사용합니다.",
+        default=DEFAULT_ENGINE,
+        help=f"Jina Reader fetch engine. 기본값: {DEFAULT_ENGINE}",
+    )
+    parser.add_argument(
+        "--respond-timing",
+        choices=(
+            "html",
+            "visible-content",
+            "mutation-idle",
+            "resource-idle",
+            "media-idle",
+            "network-idle",
+        ),
+        default=DEFAULT_RESPOND_TIMING,
+        help=f"Reader 응답 시점. 기본값: {DEFAULT_RESPOND_TIMING}",
     )
     parser.add_argument(
         "--wait-for-selector",
@@ -305,12 +367,53 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--target-selector",
-        help="이 CSS selector 내부만 Reader 결과로 받습니다.",
+        default=DEFAULT_TARGET_SELECTOR,
+        help="이 CSS selector 내부만 Reader 결과로 받습니다. 기본값은 뉴스 본문 컨테이너 후보입니다.",
     )
     parser.add_argument(
-        "--no-cache",
+        "--remove-selector",
+        default=DEFAULT_REMOVE_SELECTOR,
+        help="Reader 결과에서 제거할 CSS selector. 기본값은 메뉴/광고/댓글/관련기사 후보입니다.",
+    )
+    parser.add_argument(
+        "--retain-images",
+        choices=("all", "none", "alt"),
+        default=DEFAULT_RETAIN_IMAGES,
+        help=f"Reader 결과에 이미지를 남기는 방식. 기본값: {DEFAULT_RETAIN_IMAGES}",
+    )
+    parser.add_argument(
+        "--retain-links",
+        choices=("all", "none", "text", "gpt-oss"),
+        default=DEFAULT_RETAIN_LINKS,
+        help=f"Reader 결과에 링크를 남기는 방식. 기본값: {DEFAULT_RETAIN_LINKS}",
+    )
+    invisibles_group = parser.add_mutually_exclusive_group()
+    invisibles_group.add_argument(
+        "--detach-invisibles",
+        dest="detach_invisibles",
         action="store_true",
-        help="Jina Reader 캐시를 우회합니다.",
+        default=DEFAULT_DETACH_INVISIBLES,
+        help="Jina Reader에서 숨겨진 DOM 요소를 제거합니다. 기본값입니다.",
+    )
+    invisibles_group.add_argument(
+        "--keep-invisibles",
+        dest="detach_invisibles",
+        action="store_false",
+        help="Jina Reader에서 숨겨진 DOM 요소를 유지합니다.",
+    )
+    cache_group = parser.add_mutually_exclusive_group()
+    cache_group.add_argument(
+        "--no-cache",
+        dest="no_cache",
+        action="store_true",
+        default=DEFAULT_NO_CACHE,
+        help="Jina Reader 캐시를 우회합니다. 기본값입니다.",
+    )
+    cache_group.add_argument(
+        "--use-cache",
+        dest="no_cache",
+        action="store_false",
+        help="Jina Reader 캐시 사용을 허용합니다.",
     )
     parser.add_argument(
         "--request-interval",
@@ -398,8 +501,13 @@ def main(argv: list[str] | None = None) -> None:
                 api_key=api_key,
                 engine=args.engine,
                 timeout_seconds=args.timeout,
+                respond_timing=args.respond_timing,
                 wait_for_selector=args.wait_for_selector,
                 target_selector=args.target_selector,
+                remove_selector=args.remove_selector,
+                retain_images=args.retain_images,
+                retain_links=args.retain_links,
+                detach_invisibles=args.detach_invisibles,
                 no_cache=args.no_cache,
                 max_retries=max(0, args.max_retries),
             )

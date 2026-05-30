@@ -212,6 +212,8 @@ def build_article_params(
     render_delay_ms: int | None = None,
     scroll: str | None = None,
     discussion: bool = False,
+    use_proxy: bool = False,
+    natural_language: str | None = None,
 ) -> dict:
     params = {
         "token": token,
@@ -219,6 +221,10 @@ def build_article_params(
         "timeout": timeout_ms,
         "discussion": str(discussion).lower(),
     }
+    if use_proxy:
+        params["useProxy"] = "default"
+    if natural_language:
+        params["naturalLanguage"] = natural_language
     if render_delay_ms is not None:
         params["renderDelay"] = render_delay_ms
     if scroll:
@@ -233,6 +239,8 @@ def call_diffbot_article(
     render_delay_ms: int | None = None,
     scroll: str | None = None,
     discussion: bool = False,
+    use_proxy: bool = False,
+    natural_language: str | None = None,
     max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> dict:
     """Diffbot Article API를 호출하고 응답 JSON을 반환합니다."""
@@ -243,6 +251,8 @@ def call_diffbot_article(
         render_delay_ms=render_delay_ms,
         scroll=scroll,
         discussion=discussion,
+        use_proxy=use_proxy,
+        natural_language=natural_language,
     )
     timeout_seconds = max(30, int(timeout_ms / 1000) + 20)
 
@@ -391,6 +401,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="기사 댓글/토론 추출을 포함합니다. 기본은 본문만 추출하기 위해 제외합니다.",
     )
     parser.add_argument(
+        "--use-proxy",
+        action="store_true",
+        help="Diffbot 데이터센터 프록시를 사용합니다(useProxy=default).",
+    )
+    parser.add_argument(
+        "--natural-language",
+        nargs="?",
+        const="entities,facts,categories,sentiment,language",
+        help=(
+            "Diffbot Natural Language 분석을 실행합니다. 값 없이 쓰면 "
+            "entities,facts,categories,sentiment,language를 요청합니다."
+        ),
+    )
+    parser.add_argument(
         "--request-interval",
         type=float,
         default=DEFAULT_REQUEST_INTERVAL_SECONDS,
@@ -480,6 +504,8 @@ def main(argv: list[str] | None = None) -> None:
                 render_delay_ms=args.render_delay_ms,
                 scroll=args.scroll,
                 discussion=args.include_discussion,
+                use_proxy=args.use_proxy,
+                natural_language=args.natural_language,
                 max_retries=max(0, args.max_retries),
             )
             obj = extract_primary_object(payload)

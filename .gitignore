@@ -8,6 +8,7 @@ __pycache__/
 # Local cache / runtime files
 .gdelt_cache/
 .dummy/
+compare_quality.py
 
 # Secrets
 tavily_api/key.txt

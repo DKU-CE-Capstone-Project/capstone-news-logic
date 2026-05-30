@@ -138,11 +138,29 @@ Jina Reader 출력은 Diffbot JSON과 같은 top-level 구조로 아래 파일�
 jina_reader/extracted_articles.json
 ```
 
-동적 본문 로딩이 늦은 기사에는 Reader 옵션을 추가할 수 있습니다.
+Jina Reader 요청은 뉴스 본문 추출 정확도를 높이기 위해 기본적으로 브라우저 렌더링과 캐시 우회를 사용합니다.
+
+```http
+X-Engine: browser
+X-Respond-Timing: network-idle
+X-Timeout: 45
+X-Retain-Images: none
+X-Retain-Links: text
+X-Detach-Invisibles: true
+X-No-Cache: true
+```
+
+동적 본문 로딩이 늦은 기사에는 Reader 옵션을 추가로 조정할 수 있습니다.
 
 ```bash
-python3 jina_reader/jina_reader_extract.py "AI semiconductor" --engine browser --timeout 45
+python3 jina_reader/jina_reader_extract.py "AI semiconductor" --respond-timing resource-idle --timeout 60
 python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article" --wait-for-selector article
+```
+
+Jina Reader 요청에는 기본적으로 `X-Target-Selector`와 `X-Remove-Selector`를 함께 적용합니다. 기본 target selector는 `article`, `main`, `#articleBody`, `.article-body`, `.news_body` 같은 본문 컨테이너 후보이고, 기본 remove selector는 `nav`, `header`, `footer`, 광고, 댓글, 관련기사, 공유 UI 후보입니다. 사이트별로 더 정확한 selector를 알고 있으면 아래처럼 덮어쓸 수 있습니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article" --target-selector "article" --remove-selector "nav, header, footer, .ad, .related"
 ```
 
 Jina Reader JSON 응답의 `content` 필드를 본문으로 사용하고, Markdown 이미지/링크/제목 중복을 제거한 plain text를 `cleaned_content`에 저장합니다.
