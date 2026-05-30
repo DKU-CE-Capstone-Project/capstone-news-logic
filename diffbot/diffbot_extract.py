@@ -11,6 +11,9 @@ import argparse
 import json
 import re
 import sys
+import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse
 
@@ -31,6 +34,8 @@ from test import (  # noqa: E402
 
 
 MAX_URLS = 10
+DEFAULT_REQUEST_INTERVAL_SECONDS = 10.0
+DEFAULT_MAX_RETRIES = 3
 DIFFBOT_TOKEN_FILE = Path(__file__).resolve().parent / "token.txt"
 DIFFBOT_ARTICLE_URL = "https://api.diffbot.com/v3/article"
 OUTPUT_FILE = Path(__file__).resolve().parent / "extracted_articles.json"
@@ -79,6 +84,37 @@ def normalize_diffbot_text(text: str) -> str:
         if line:
             paragraphs.append(line)
     return "\n".join(paragraphs)
+
+
+def retry_after_seconds(value: str | None) -> float | None:
+    """Retry-After 헤더를 초 단위로 변환합니다."""
+    if not value:
+        return None
+
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+
+    duration_match = re.fullmatch(
+        r"(?:(\d+)\s+days?,\s*)?(\d{1,2}):(\d{2}):(\d{2})",
+        value,
+        re.IGNORECASE,
+    )
+    if duration_match:
+        days = int(duration_match.group(1) or 0)
+        hours = int(duration_match.group(2))
+        minutes = int(duration_match.group(3))
+        seconds = int(duration_match.group(4))
+        return float(days * 86400 + hours * 3600 + minutes * 60 + seconds)
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
 
 
 def normalize_title_key(title: str) -> str:
@@ -197,27 +233,58 @@ def call_diffbot_article(
     render_delay_ms: int | None = None,
     scroll: str | None = None,
     discussion: bool = False,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> dict:
     """Diffbot Article API를 호출하고 응답 JSON을 반환합니다."""
-    response = requests.get(
-        DIFFBOT_ARTICLE_URL,
-        params=build_article_params(
-            url=url,
-            token=token,
-            timeout_ms=timeout_ms,
-            render_delay_ms=render_delay_ms,
-            scroll=scroll,
-            discussion=discussion,
-        ),
-        timeout=max(30, int(timeout_ms / 1000) + 20),
+    request_params = build_article_params(
+        url=url,
+        token=token,
+        timeout_ms=timeout_ms,
+        render_delay_ms=render_delay_ms,
+        scroll=scroll,
+        discussion=discussion,
     )
-    response.raise_for_status()
-    payload = response.json()
+    timeout_seconds = max(30, int(timeout_ms / 1000) + 20)
 
-    if payload.get("error") or payload.get("errorCode"):
-        detail = payload.get("error") or payload.get("message") or payload.get("errorCode")
-        raise RuntimeError(f"Diffbot API error: {detail}")
-    return payload
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.get(
+                DIFFBOT_ARTICLE_URL,
+                params=request_params,
+                timeout=timeout_seconds,
+            )
+        except requests.RequestException as error:
+            if attempt >= max_retries:
+                raise
+            wait_seconds = DEFAULT_REQUEST_INTERVAL_SECONDS * (attempt + 1)
+            error_message = str(error).replace(token, "<TOKEN>")
+            print(f"\n       Diffbot request failed: {error_message}")
+            print(f"       {wait_seconds:.1f}초 후 재시도...")
+            time.sleep(wait_seconds)
+            continue
+
+        if response.status_code == 429 and attempt < max_retries:
+            wait_seconds = retry_after_seconds(response.headers.get("Retry-After"))
+            if wait_seconds is None:
+                wait_seconds = DEFAULT_REQUEST_INTERVAL_SECONDS * (attempt + 1)
+            wait_seconds = max(1.0, wait_seconds)
+            print(f"\n       Diffbot rate limit. {wait_seconds:.1f}초 후 재시도...")
+            time.sleep(wait_seconds)
+            continue
+
+        if response.status_code >= 400:
+            detail = response.text.strip().replace(token, "<TOKEN>")
+            if len(detail) > 300:
+                detail = detail[:300] + "..."
+            raise RuntimeError(f"Diffbot HTTP {response.status_code}: {detail}")
+
+        payload = response.json()
+        if payload.get("error") or payload.get("errorCode"):
+            detail = payload.get("error") or payload.get("message") or payload.get("errorCode")
+            raise RuntimeError(f"Diffbot API error: {detail}")
+        return payload
+
+    raise RuntimeError("Diffbot API request failed after retries.")
 
 
 def extract_primary_object(payload: dict) -> dict:
@@ -324,6 +391,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="기사 댓글/토론 추출을 포함합니다. 기본은 본문만 추출하기 위해 제외합니다.",
     )
     parser.add_argument(
+        "--request-interval",
+        type=float,
+        default=DEFAULT_REQUEST_INTERVAL_SECONDS,
+        help=f"Diffbot 호출 사이 대기 시간(초). 기본값: {DEFAULT_REQUEST_INTERVAL_SECONDS:g}",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help=f"429 응답 재시도 횟수. 기본값: {DEFAULT_MAX_RETRIES}",
+    )
+    parser.add_argument(
         "--fallback-local",
         action="store_true",
         help="Diffbot text가 비어 있을 때 기존 로컬 DOM/trafilatura 추출기를 한 번 더 시도합니다.",
@@ -389,6 +468,9 @@ def main(argv: list[str] | None = None) -> None:
 
     for idx, article in enumerate(articles, 1):
         url = article["url"]
+        if idx > 1 and args.request_interval > 0:
+            print(f"  다음 호출 전 {args.request_interval:g}초 대기...")
+            time.sleep(args.request_interval)
         print(f"  [{idx:02d}] {url} ... ", end="", flush=True)
         try:
             payload = call_diffbot_article(
@@ -398,6 +480,7 @@ def main(argv: list[str] | None = None) -> None:
                 render_delay_ms=args.render_delay_ms,
                 scroll=args.scroll,
                 discussion=args.include_discussion,
+                max_retries=max(0, args.max_retries),
             )
             obj = extract_primary_object(payload)
             diffbot_text = normalize_diffbot_text(obj.get("text", ""))
@@ -419,11 +502,12 @@ def main(argv: list[str] | None = None) -> None:
                 "cleaned_content_length": len(cleaned),
             })
         except (requests.RequestException, RuntimeError, ValueError) as error:
-            print(f"실패: {error}")
+            error_message = str(error).replace(token, "<TOKEN>")
+            print(f"실패: {error_message}")
             failed_results.append({
                 "url": url,
                 "title": article.get("title", ""),
-                "error": str(error),
+                "error": error_message,
             })
 
     output = {
