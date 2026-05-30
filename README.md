@@ -11,9 +11,12 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | `tavily_api/key.txt` | Tavily API 키 파일. Git에 올리지 않습니다 |
 | `tavily_api/extracted_articles.json` | 최종 출력 JSON. 실행 시 새로 생성됩니다 |
 | `diffbot/diffbot_extract.py` | Diffbot Article API로 뉴스 본문을 추출하는 실행 파일 |
+| `jina_reader/jina_reader_extract.py` | Jina Reader API로 뉴스 본문을 추출하는 실행 파일 |
 | `BODY_MATCH_VALIDATION.md` | 저장된 기사 본문과 실제 URL 본문이 일치하는지 검증하는 방법 |
 | `diffbot/token.txt` | Diffbot API token 파일. Git에 올리지 않습니다 |
 | `diffbot/extracted_articles.json` | Diffbot 추출 결과 JSON. 실행 시 새로 생성됩니다 |
+| `jina_reader/key.txt` | Jina API key 파일. 선택 사항이며 Git에 올리지 않습니다 |
+| `jina_reader/extracted_articles.json` | Jina Reader 추출 결과 JSON. 실행 시 새로 생성됩니다 |
 | `.gdelt_cache/` | GDELT 응답 캐시와 요청 간격 기록 |
 
 ## 입력
@@ -101,6 +104,48 @@ python3 diffbot/diffbot_extract.py "AI semiconductor" --render-delay-ms 3000 --s
 ```
 
 Diffbot API 응답의 `text` 필드를 본문으로 저장합니다. Diffbot `text`가 비어 있을 때 기존 로컬 DOM/trafilatura 추출 로직까지 시도하려면 `--fallback-local`을 추가합니다.
+
+## Jina Reader로 기사 본문 추출
+
+Jina Reader API는 키 없이도 호출할 수 있습니다. 더 높은 rate limit을 쓰려면 아래 파일에 Jina API key를 저장합니다.
+
+```text
+jina_reader/key.txt
+```
+
+GDELT에서 기사 URL을 검색한 뒤 중복 제거된 상위 URL을 Jina Reader API에 전달합니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py
+python3 jina_reader/jina_reader_extract.py "AI semiconductor" --jina-count 5
+```
+
+특정 기사 URL만 바로 추출할 수도 있습니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article"
+```
+
+URL 목록 파일을 사용할 수도 있습니다. 파일은 한 줄에 하나의 URL을 넣습니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py --url-file urls.txt --jina-count 10
+```
+
+Jina Reader 출력은 Diffbot JSON과 같은 top-level 구조로 아래 파일에 저장됩니다.
+
+```text
+jina_reader/extracted_articles.json
+```
+
+동적 본문 로딩이 늦은 기사에는 Reader 옵션을 추가할 수 있습니다.
+
+```bash
+python3 jina_reader/jina_reader_extract.py "AI semiconductor" --engine browser --timeout 45
+python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/article" --wait-for-selector article
+```
+
+Jina Reader JSON 응답의 `content` 필드를 본문으로 사용하고, Markdown 이미지/링크/제목 중복을 제거한 plain text를 `cleaned_content`에 저장합니다.
 
 ## GDELT 호출 형식
 

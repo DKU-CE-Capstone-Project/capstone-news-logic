@@ -12,12 +12,14 @@ __pycache__/
 # Secrets
 tavily_api/key.txt
 diffbot/token.txt
+jina_reader/key.txt
 .env
 .env.*
 
 # Generated outputs
 tavily_api/*.json
 diffbot/*.json
+jina_reader/*.json
 diffbot/extracted_articles.md
 
 # Virtual environments
