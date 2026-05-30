@@ -16,10 +16,8 @@ diffbot/token.txt
 .env.*
 
 # Generated output JSON
-tavily_api/extracted_articles.json
-tavily_api/extracted_english_articles.json
-tavily_api/extracted_english_articles_1d.json
-diffbot/extracted_articles.json
+tavily_api/*.json
+diffbot/*.json
 
 # Virtual environments
 .venv/
