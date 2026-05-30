@@ -10,6 +10,9 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | `tavily_api/tavily_extract.py` | 메인 실행 파일. GDELT 검색, 중복 제거, Tavily 호출, 본문 정제, JSON 저장 |
 | `tavily_api/key.txt` | Tavily API 키 파일. Git에 올리지 않습니다 |
 | `tavily_api/extracted_articles.json` | 최종 출력 JSON. 실행 시 새로 생성됩니다 |
+| `diffbot/diffbot_extract.py` | Diffbot Article API로 뉴스 본문을 추출하는 실행 파일 |
+| `diffbot/token.txt` | Diffbot API token 파일. Git에 올리지 않습니다 |
+| `diffbot/extracted_articles.json` | Diffbot 추출 결과 JSON. 실행 시 새로 생성됩니다 |
 | `.gdelt_cache/` | GDELT 응답 캐시와 요청 간격 기록 |
 
 ## 입력
@@ -42,6 +45,47 @@ python3 tavily_api/tavily_extract.py "AI semiconductor"
 ```bash
 python3 tavily_api/tavily_extract.py "AI semiconductor" --source-lang korean --sort hybridrel --maxrecords 20 --timespan 1d --tavily-count 10
 ```
+
+## Diffbot로 기사 본문 추출
+
+Diffbot token은 아래 파일에 저장합니다. 이 파일은 Git에 올리지 않습니다.
+
+```text
+diffbot/token.txt
+```
+
+GDELT에서 기사 URL을 검색한 뒤 중복 제거된 상위 URL을 Diffbot Article API에 전달합니다.
+
+```bash
+python3 diffbot/diffbot_extract.py
+python3 diffbot/diffbot_extract.py "AI semiconductor" --diffbot-count 5
+```
+
+특정 기사 URL만 바로 추출할 수도 있습니다.
+
+```bash
+python3 diffbot/diffbot_extract.py --url "https://example.com/news/article"
+```
+
+URL 목록 파일을 사용할 수도 있습니다. 파일은 한 줄에 하나의 URL을 넣습니다.
+
+```bash
+python3 diffbot/diffbot_extract.py --url-file urls.txt --diffbot-count 10
+```
+
+Diffbot 출력은 기본적으로 아래 파일에 저장됩니다.
+
+```text
+diffbot/extracted_articles.json
+```
+
+본문이 동적으로 늦게 로드되는 기사에는 Diffbot 렌더링 옵션을 추가할 수 있습니다.
+
+```bash
+python3 diffbot/diffbot_extract.py "AI semiconductor" --render-delay-ms 3000 --scroll slow
+```
+
+Diffbot API 응답의 `text` 필드를 본문으로 저장합니다. Diffbot `text`가 비어 있을 때 기존 로컬 DOM/trafilatura 추출 로직까지 시도하려면 `--fallback-local`을 추가합니다.
 
 ## GDELT 호출 형식
 
@@ -238,5 +282,7 @@ PY
 ## 주의 사항
 
 - `tavily_api/key.txt`는 API 키 파일이므로 GitHub에 올리면 안 됩니다.
+- `diffbot/token.txt`는 API token 파일이므로 GitHub에 올리면 안 됩니다.
 - `.gdelt_cache/`는 로컬 캐시입니다. 실행 결과 재현에는 필요하지 않습니다.
 - `tavily_api/extracted_articles.json`은 실행 결과물입니다. 샘플 결과가 필요하면 민감정보 없는 별도 샘플 파일을 만들어 사용하는 것이 좋습니다.
+- `diffbot/extracted_articles.json`은 Diffbot 실행 결과물입니다.
