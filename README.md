@@ -79,6 +79,20 @@ Diffbot 출력은 기본적으로 아래 파일에 저장됩니다.
 diffbot/extracted_articles.json
 ```
 
+JSON 없이 Markdown 파일만 만들려면 별도 Markdown 전용 스크립트를 사용합니다.
+
+```bash
+python3 diffbot/diffbot_extract_md.py
+python3 diffbot/diffbot_extract_md.py "AI semiconductor" --diffbot-count 5
+python3 diffbot/diffbot_extract_md.py --url "https://example.com/news/article"
+```
+
+Markdown 출력은 기본적으로 아래 파일에 저장됩니다.
+
+```text
+diffbot/extracted_articles.md
+```
+
 본문이 동적으로 늦게 로드되는 기사에는 Diffbot 렌더링 옵션을 추가할 수 있습니다.
 
 ```bash
