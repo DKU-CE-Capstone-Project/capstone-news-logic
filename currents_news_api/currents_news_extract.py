@@ -64,10 +64,6 @@ LANGUAGE_ALIASES = {
 }
 
 
-def normalize_space(text: str) -> str:
-    return re.sub(r"\s+", " ", (text or "").replace("\xa0", " ")).strip()
-
-
 def source_domain(url: str) -> str:
     return urlparse(url or "").netloc.lower()
 
@@ -261,23 +257,13 @@ def normalize_currents_articles(payload: dict) -> list[dict]:
         if not url:
             continue
 
-        title = item.get("title") or "(제목 없음)"
-        description = normalize_space(
-            item.get("description") or item.get("content") or item.get("text") or ""
-        )
         results.append({
-            "id": item.get("id", ""),
+            "title": item.get("title") or "(제목 없음)",
             "url": url,
-            "title": title,
             "source_domain": source_domain(url),
             "published_at": item.get("published", ""),
             "language": item.get("language", ""),
-            "category": item.get("category", []),
-            "author": item.get("author") or "",
             "image_url": item.get("image") or "",
-            "description": description,
-            "cleaned_content": description,
-            "cleaned_content_length": len(description),
         })
 
     return dedupe_articles(results)
@@ -403,12 +389,7 @@ def main(argv: list[str] | None = None) -> None:
 
     articles = normalize_currents_articles(payload)
     output = {
-        "source_api": "currents",
         "query": request_query,
-        "sort": args.sort,
-        "currents_request": request_params,
-        "page": payload.get("page", args.page_number),
-        "next_cursor": payload.get("next_cursor"),
         "total": len(articles),
         "results": articles,
         "failed_results": [],
@@ -428,7 +409,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"\n[{index:02d}] {article['title']}")
         print(f"     URL: {article['url']}")
         print(f"     published: {article['published_at']}")
-        print(f"     description length: {article['cleaned_content_length']}자")
+        print(f"     source: {article['source_domain']}")
 
 
 if __name__ == "__main__":

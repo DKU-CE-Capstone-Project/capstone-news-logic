@@ -200,7 +200,57 @@ Currents 출력은 아래 파일에 저장됩니다.
 currents_news_api/extracted_articles.json
 ```
 
-Currents Search API는 기사 본문 추출 API가 아니라 뉴스 메타데이터/설명 검색 API이므로, `cleaned_content`에는 Currents 응답의 `description` 값을 저장합니다.
+Currents Search API 결과는 GDELT에서 수집한 기사 목록과 같은 메타데이터 필드로 저장합니다. 기사 본문은 Currents에서 저장하지 않고, 이후 Diffbot 같은 본문 추출 API가 URL을 받아 추출합니다.
+
+## GDELT 사용 주의사항
+
+GDELT DOC API는 RPM(requests per minute) 제한이 강하게 걸릴 수 있습니다. 이 프로젝트의 `test.py`는 로컬 실행 중 과도한 반복 요청을 줄이기 위해 요청 간격과 캐시를 사용하지만, 실제 배포 환경에서는 기본 테스트 간격보다 훨씬 긴 호출 간격을 두어야 합니다.
+
+자동 배치, 서버 API, 사용자 요청에 따른 실시간 검색처럼 반복 호출이 발생할 수 있는 환경에서는 GDELT를 짧은 주기로 직접 호출하지 않는 것을 권장합니다. 운영 환경에서는 요청 수를 제한하고, 검색 결과 캐시를 적극적으로 사용하며, 같은 검색어에 대한 재조회 간격을 충분히 길게 잡아야 합니다.
+
+개발 중 반복 테스트나 빠른 응답 확인이 목적이라면 GDELT보다 별도 API를 사용하는 편이 좋습니다. 예를 들어 Currents News API는 테스트용 뉴스 목록 확인에 사용할 수 있고, Diffbot/Jina Reader는 이미 확보한 URL의 본문 추출 흐름을 검증하는 용도로 사용할 수 있습니다.
+
+## 뉴스 검색 API 변경 방법
+
+뉴스 검색 API는 기사 URL과 메타데이터를 수집하는 단계입니다. Diffbot, Jina Reader, Tavily는 이 URL을 받아 본문을 추출하는 단계이므로, 검색 API를 바꿀 때는 본문 필드가 아니라 기사 목록 메타데이터 형식을 맞추는 것이 중요합니다.
+
+새 검색 API를 추가하거나 GDELT 대신 다른 API를 사용하려면 결과를 아래 `results` 항목 형태로 정규화합니다.
+
+```json
+{
+  "title": "기사 제목",
+  "url": "https://example.com/news-1",
+  "source_domain": "example.com",
+  "published_at": "2026-05-25 01:00:00 +0000",
+  "language": "ko",
+  "image_url": "https://example.com/image.jpg"
+}
+```
+
+필수 필드는 `url`입니다. `title`, `source_domain`, `published_at`, `language`, `image_url`은 가능한 경우 채우고, API가 제공하지 않으면 빈 문자열로 둡니다. 검색 API 출력에는 `cleaned_content`나 `cleaned_content_length`를 넣지 않습니다. 본문은 이후 Diffbot 같은 본문 추출 API가 채웁니다.
+
+검색 API 스크립트의 최종 JSON은 아래 top-level 구조를 유지합니다.
+
+```json
+{
+  "query": "semiconductor sourcelang:korean",
+  "total": 10,
+  "results": [],
+  "failed_results": []
+}
+```
+
+API별 변경 절차는 아래 순서를 따릅니다.
+
+1. 새 API용 디렉터리와 실행 파일을 만듭니다. 예: `currents_news_api/currents_news_extract.py`
+2. API key 파일과 실행 결과 JSON이 Git에 올라가지 않도록 `.gitignore`에 추가합니다.
+3. 새 API 응답을 공통 기사 메타데이터 필드로 변환하는 정규화 함수를 만듭니다.
+4. URL과 제목 기준 중복 제거 로직을 적용합니다.
+5. 최종 JSON을 `query`, `total`, `results`, `failed_results` 구조로 저장합니다.
+6. Diffbot 같은 본문 추출기는 `results[*].url`을 입력으로 사용하고, 기존 메타데이터에 본문 추출 결과를 합쳐 저장합니다.
+7. README의 사용 파일, 실행 예시, 테스트 명령을 새 API에 맞게 갱신합니다.
+
+기존 GDELT 검색을 코드에서 직접 교체하려면 각 추출기의 `collect_urls_from_gdelt()` 역할을 하는 함수가 반환하는 리스트를 위 메타데이터 형식으로 맞추면 됩니다. 이렇게 하면 검색 API가 GDELT인지 Currents인지와 관계없이 이후 본문 추출 단계는 같은 입력 형식을 사용할 수 있습니다.
 
 ## GDELT 호출 형식
 
@@ -249,6 +299,7 @@ GDELT 결과에서 중복 뉴스를 제거한 뒤 상위 10개 URL만 Tavily Ext
 | Diffbot | `diffbot/extracted_articles.json` | Diffbot `text` 길이와 정제 본문 저장 |
 | Diffbot Markdown | `diffbot/extracted_articles.md` | Diffbot 결과를 사람이 읽기 쉬운 Markdown으로 저장 |
 | Jina Reader | `jina_reader/extracted_articles.json` | Jina Reader `content` 길이와 정제 본문 저장 |
+| Currents | `currents_news_api/extracted_articles.json` | GDELT 기사 목록과 같은 메타데이터 필드 저장 |
 
 JSON 출력은 추출기와 관계없이 같은 top-level 구조를 사용합니다.
 
@@ -273,6 +324,19 @@ JSON 출력은 추출기와 관계없이 같은 top-level 구조를 사용합니
 ```
 
 `query`에는 실제 GDELT query 문자열이 들어갑니다. `--url` 또는 `--url-file`로 직접 URL을 입력한 Diffbot/Jina 실행에서는 `direct-url`이 들어갑니다. `total`은 성공적으로 저장된 기사 수이고, `failed_results`에는 실패한 URL과 오류 메시지가 들어갑니다.
+
+Currents 결과의 `results` 항목은 Diffbot 입력으로 바로 넘길 수 있도록 GDELT 기사 목록과 같은 메타데이터 필드만 사용합니다.
+
+```json
+{
+  "url": "https://example.com/news-1",
+  "title": "기사 제목",
+  "source_domain": "example.com",
+  "published_at": "2026-05-25 01:00:00 +0000",
+  "language": "ko",
+  "image_url": "https://example.com/image.jpg"
+}
+```
 
 Tavily 결과의 `results` 항목은 아래 필드를 사용합니다.
 
@@ -375,7 +439,7 @@ Jina Reader 실행 순서는 아래와 같습니다.
 먼저 문법 검사를 수행합니다.
 
 ```bash
-python3 -m py_compile test.py tavily_api/tavily_extract.py diffbot/diffbot_extract.py diffbot/diffbot_extract_md.py jina_reader/jina_reader_extract.py
+python3 -m py_compile test.py tavily_api/tavily_extract.py diffbot/diffbot_extract.py diffbot/diffbot_extract_md.py jina_reader/jina_reader_extract.py currents_news_api/currents_news_extract.py
 ```
 
 도움말은 다음 명령으로 확인합니다.
@@ -386,6 +450,7 @@ python3 tavily_api/tavily_extract.py --help
 python3 diffbot/diffbot_extract.py --help
 python3 diffbot/diffbot_extract_md.py --help
 python3 jina_reader/jina_reader_extract.py --help
+python3 currents_news_api/currents_news_extract.py --help
 ```
 
 GDELT 검색과 Tavily 전체 파이프라인은 기본값으로 테스트합니다. `tavily_api/key.txt`가 필요하고, 기본 출력 파일을 덮어씁니다.
