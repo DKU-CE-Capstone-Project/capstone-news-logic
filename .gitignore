@@ -14,6 +14,7 @@ compare_quality.py
 tavily_api/key.txt
 diffbot/token.txt
 jina_reader/key.txt
+currents_news_api/key.env
 .env
 .env.*
 
@@ -21,6 +22,7 @@ jina_reader/key.txt
 tavily_api/*.json
 diffbot/*.json
 jina_reader/*.json
+currents_news_api/*.json
 diffbot/extracted_articles.md
 
 # Virtual environments

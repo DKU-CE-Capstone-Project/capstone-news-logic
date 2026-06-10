@@ -13,12 +13,15 @@ GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 �
 | `diffbot/diffbot_extract.py` | Diffbot Article API로 뉴스 본문을 추출하는 실행 파일 |
 | `diffbot/diffbot_extract_md.py` | Diffbot Article API 결과를 Markdown으로 저장하는 실행 파일 |
 | `jina_reader/jina_reader_extract.py` | Jina Reader API로 뉴스 본문을 추출하는 실행 파일 |
+| `currents_news_api/currents_news_extract.py` | Currents News API로 `test.py`의 입력값을 적용해 뉴스 목록 JSON 생성 |
 | `BODY_MATCH_VALIDATION.md` | 저장된 기사 본문과 실제 URL 본문이 일치하는지 검증하는 방법 |
 | `diffbot/token.txt` | Diffbot API token 파일. Git에 올리지 않습니다 |
 | `diffbot/extracted_articles.json` | Diffbot 추출 결과 JSON. 실행 시 새로 생성됩니다 |
 | `diffbot/extracted_articles.md` | Diffbot Markdown 추출 결과. 실행 시 새로 생성됩니다 |
 | `jina_reader/key.txt` | Jina API key 파일. 선택 사항이며 Git에 올리지 않습니다 |
 | `jina_reader/extracted_articles.json` | Jina Reader 추출 결과 JSON. 실행 시 새로 생성됩니다 |
+| `currents_news_api/key.env` | Currents API key 파일. Git에 올리지 않습니다 |
+| `currents_news_api/extracted_articles.json` | Currents 검색 결과 JSON. 실행 시 새로 생성됩니다 |
 | `.gdelt_cache/` | GDELT 응답 캐시와 요청 간격 기록 |
 
 ## 입력
@@ -168,6 +171,36 @@ python3 jina_reader/jina_reader_extract.py --url "https://example.com/news/artic
 ```
 
 Jina Reader JSON 응답의 `content` 필드를 본문으로 사용하고, Markdown 이미지/링크/제목 중복을 제거한 plain text를 `cleaned_content`에 저장합니다.
+
+## Currents News API로 뉴스 목록 검색
+
+Currents API key는 아래 파일에 저장합니다. 이 파일은 Git에 올리지 않습니다.
+
+```text
+currents_news_api/key.env
+```
+
+예시는 아래와 같습니다.
+
+```text
+CURRENTS_API_KEY=YOUR_API_KEY
+```
+
+`test.py`의 기본 입력값을 Currents Search API 파라미터로 변환합니다. 기본 검색어 `semiconductor`는 `keywords`, 기본 언어 `korean`은 Currents 언어 코드 `ko`, 기본 기사 수 `20`은 `page_size`, 기본 기간 `1d`는 `start_date`로 적용됩니다.
+
+```bash
+python3 currents_news_api/currents_news_extract.py
+python3 currents_news_api/currents_news_extract.py "AI 반도체" --maxrecords 5
+python3 currents_news_api/currents_news_extract.py "AI 반도체" --source-lang korean --timespan 1d --country KR
+```
+
+Currents 출력은 아래 파일에 저장됩니다.
+
+```text
+currents_news_api/extracted_articles.json
+```
+
+Currents Search API는 기사 본문 추출 API가 아니라 뉴스 메타데이터/설명 검색 API이므로, `cleaned_content`에는 Currents 응답의 `description` 값을 저장합니다.
 
 ## GDELT 호출 형식
 
