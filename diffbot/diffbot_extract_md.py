@@ -35,7 +35,7 @@ from diffbot.diffbot_extract import (  # noqa: E402
     read_url_file,
     source_domain,
 )
-from test import (  # noqa: E402
+from capstone_news_logic.gdelt import (  # noqa: E402
     DEFAULT_MAX_RECORDS,
     DEFAULT_SEARCH_QUERY,
     DEFAULT_SORT,
