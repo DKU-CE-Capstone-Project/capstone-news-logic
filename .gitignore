@@ -32,9 +32,3 @@ env/
 
 # Logs
 *.log
-
-# Packaging and tests
-*.egg-info/
-build/
-dist/
-.pytest_cache/

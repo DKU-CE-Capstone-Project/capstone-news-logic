@@ -2,27 +2,11 @@
 
 GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 뒤 Tavily Extract API, Diffbot Article API, Jina Reader API로 뉴스 본문 JSON을 생성하는 프로젝트입니다.
 
-## 백엔드 연결과 자동배포
-
-이 저장소는 `capstone-news-logic` Python 패키지로도 설치됩니다.
-GDELT 공통 구현은 `capstone_news_logic/gdelt.py`, 백엔드용 비동기 인터페이스는
-`capstone_news_logic/api.py`, Diffbot 구현은 `diffbot/diffbot_extract.py`에서 관리합니다.
-`test.py`는 기존 CLI 호환 진입점입니다. 이 파일에 별도의 수집 로직을 추가하지 마세요.
-
-```bash
-pip install -e '.[dev]'
-python -m pytest -q
-```
-
-`main`의 CI가 통과하면 서버가 변경을 확인하고 백엔드·프론트와 함께 테스트 후 배포합니다.
-동일 릴리스에 포함된 뉴스 저장소의 정확한 커밋을 백엔드 이미지에 설치하므로 소스 복사가 필요 없습니다.
-운영 절차는 [자동배포 설명서](https://github.com/DKU-CE-Capstone-Project/capstone-deploy/blob/main/gcp/README.md)를 참고하세요.
-
 ## 사용 파일
 
 | 파일 | 역할 |
 |---|---|
-| `test.py` | 기존 CLI 실행 진입점 (`capstone_news_logic/gdelt.py` 호출) |
+| `test.py` | GDELT DOC API 검색 설정, 요청, 캐시 처리 |
 | `tavily_api/tavily_extract.py` | 메인 실행 파일. GDELT 검색, 중복 제거, Tavily 호출, 본문 정제, JSON 저장 |
 | `tavily_api/key.txt` | Tavily API 키 파일. Git에 올리지 않습니다 |
 | `tavily_api/extracted_articles.json` | 최종 출력 JSON. 실행 시 새로 생성됩니다 |
