@@ -1,4 +1,25 @@
-# GDELT News Extraction
+# EconMind 뉴스 추출기 연구
+
+## 현재 제품 적용 정책 (2026-09-18)
+
+**GDELT에서 반복되는 HTTP 429 오류로 검색·테스트가 어려워져 제품의 기본 뉴스 공급원을 NCP NAVER API HUB로 변경했다. 해외 뉴스는 검토 예정이다.**
+
+실제 서비스 코드는 [capstone-backend](https://github.com/DKU-CE-Capstone-Project/capstone-backend)에 있다. 이 저장소의 GDELT·Tavily·Diffbot·Jina·Currents 스크립트는 추출기 비교 연구 자료로 보존하며 자동 운영 수집기로 배포하지 않는다.
+
+현재 서비스 흐름:
+
+1. NCP 뉴스 검색 20건 중 NAVER 뉴스 URL이 있는 항목만 유지한다.
+2. NAVER HTML의 `em.media_end_categorize_item`에서 정치·사회가 하나라도 있으면 제외한다. 분류 확인 실패도 제외한다.
+3. 검색 이미지는 NAVER 페이지 `og:image`, 뉴스 상세 내용은 API `description`만 사용한다.
+4. **리포트 보기에서만 선택 기사 1건의 NAVER URL을 Diffbot으로 추출**한다. QR 코드 이미지를 걸러내고 본문·출처를 MongoDB에 저장한다.
+5. 기사 키워드·카테고리는 Gemini 3.5 Flash-Lite / Flex → 검증·정규화 → 규칙 fallback 순서로 처리한다.
+
+GDELT 429 대응용 백그라운드 수집은 적용하지 않는다. 아래 명령과 키 파일 설명은 연구 스크립트용이며, 실제 서비스는 백엔드 `.env`의 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `DIFFBOT_TOKEN`, `GOOGLE_API_KEY`를 사용한다.
+
+이번 변경은 문서만 갱신했다. 연구 스크립트의 실제 외부 API 실행은 재검증하지 않았다. 제품 배포와 검증은 [릴리스 기록](https://github.com/DKU-CE-Capstone-Project/econmind-docs/blob/main/docs/07-news-release-2026-09-18.md)을 따른다.
+
+## 기존 연구 사용법
+
 
 GDELT DOC API에서 뉴스 목록을 검색하고, 중복 뉴스를 제거한 뒤 Tavily Extract API, Diffbot Article API, Jina Reader API로 뉴스 본문 JSON을 생성하는 프로젝트입니다.
 
